@@ -367,16 +367,14 @@ int floatFloat2Int(unsigned uf)
   int result = 0;
   // 非规格化数 (int)f => 0. OR 规格化数 E=exp-bias < 0, (int)f => 0
   if (exp < bias)
-    result = 0;
-  else if (exp == bias)
-    result = frac >= 0x400000 ? 2 : 1;
-  // NaN or Infinity.
-  else if (exp == 255 || exp - bias >= 32)
-    return 0x80000000u;
+    return 0;
   else if (exp - bias <= 23)
     result = ((1 << 23) | frac) >> (23 - (exp - bias));
   else if (exp - bias < 32)
     result = ((1 << 23) | frac) << (exp - bias - 24);
+  // NaN、Infinity or Overflow.
+  else if (exp == 255 || exp - bias >= 32)
+    return 0x80000000u;
 
   return s ? -result : result;
 }
