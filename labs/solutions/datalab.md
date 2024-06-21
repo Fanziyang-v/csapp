@@ -112,7 +112,7 @@ We are expressly ***forbidden*** to:
 4. Use the BDD checker to formally verify our functions
 5. The maximum number of ops for each function is given in the header comment for each function. If there are any inconsistencies  between the maximum ops in the writeup and in this file, consider this file the authoritative source.
 
-## Solutions
+## Solutions⭐
 
 ### bitXor
 bitXor 要求我们通过 `~` 和 `&` 运算符实现 ***XOR*** 运算符，因为 `x ^ y` 等价于 `(~x & y) | (~y & x)`，然而题目中不可以使用 `|` 运算符，可利用***德摩根律***（De Morgan Law）将 `|` 运算符仅用 `~` 和 `&` 运算符表示，因此 `x ^ y` 等价于 `~(~(~x & y) & ~(~y & x))`。
@@ -145,14 +145,45 @@ int tmin(void) {
 ```
 
 ### isTmax
-最大的二进制补码数（TMax32）的值为 `0x7FFFFFFF`，实际上，我们可以通过表达式 TMax32 + 1 得到 TMin32（正溢出），因为共有以下两种场景会使得 `x+x` 的结果为 0：
-1. x 等于 0
-2. x 等于 TMin32
+最大的二进制补码数（TMax32）的值为 `0x7FFFFFFF`，根据位级整数的运算性质，TMax32 + 1（正溢出）等于 TMin32，由于 **~TMin32 等于 TMax32**，进行相等性判断就可判断 `x` 是否为 TMax32。
 
-因此
+**注**：`~(x + 1) == x` 共有两种情况，`x` 为 -1 或者 TMax32，因此需要排除 `x` 为 -1 的情况。
+```c
+/*
+ * isTmax - returns 1 if x is the maximum, two's complement number,
+ *     and 0 otherwise 
+ *   Legal ops: ! ~ & ^ | +
+ *   Max ops: 10
+ *   Rating: 1
+ */
+int isTmax(int x) {
+  int y = x + 1;
+  return !(~y ^ x) & !!y;
+}
+```
+
+
+### allOddBits
+allOddBits 要求我们判断输入 `x` 的所有奇数位是否为 1，可以生成一个掩码 `mask=0xAAAAAAAA`（奇数位全1，偶数位全0），通过 `mask & x` 消除 `x` 偶数位的影响，再通过 `!(x ^ y)` 来进行相等性的判断。
+```c
+/* 
+ * allOddBits - return 1 if all odd-numbered bits in word set to 1
+ *   where bits are numbered from 0 (least significant) to 31 (most significant)
+ *   Examples allOddBits(0xFFFFFFFD) = 0, allOddBits(0xAAAAAAAA) = 1
+ *   Legal ops: ! ~ & ^ | + << >>
+ *   Max ops: 12
+ *   Rating: 2
+ */
+int allOddBits(int x) {
+  // 生成掩码 0xAAAAAAAA
+  int mask = (0xAA << 24) | (0xAA << 16) | (0xAA << 8) | 0xAA;
+  return !((mask & x) ^ mask);
+}
+```
+
 
 ### negate
-可以通过 `~` 和 `+` 运算符实现相反数运算，根据位级整数的性质，`-x` 等价于 `~x+1`。
+可以通过 `~` 和 `+` 运算符实现相反数运算，根据位级整数的性质，`-x` 等价于 `~x + 1`。
 ```c
 /* 
  * negate - return -x 
@@ -166,7 +197,40 @@ int negate(int x) {
 }
 ```
 
+### isAsciiDigit
+isAsciiDigit 要求我们判断输入 `x` 是否为一个数字字符（`'0' <= x <= '9'`），对应的 ASCII 码范围是 `0x30-0x39`，具有相似的位模式 `0x3.`，大致思路如下：
+1. 判断 `x` 是否具有位模式 `0x3.`
+2. 在（1）的基础上，判断 `x` 是否小于 0x39。
+
+**注**：判断 `x` 小于 0x39 可以通过 `!(((x + 6) & ~0xF) ^ 0x30)` 进行判断，因为如果 `0x39 < x <= 0x3F` ，则 `(x + 6)` 就不再具有位模式 `0x3.` 了。
+```c
+/* 
+ * isAsciiDigit - return 1 if 0x30 <= x <= 0x39 (ASCII codes for characters '0' to '9')
+ *   Example: isAsciiDigit(0x35) = 1.
+ *            isAsciiDigit(0x3a) = 0.
+ *            isAsciiDigit(0x05) = 0.
+ *   Legal ops: ! ~ & ^ | + << >>
+ *   Max ops: 15
+ *   Rating: 3
+ */
+int isAsciiDigit(int x) {
+  return !((x & ~0xF) ^ 0x30) & !(((x + 6) & ~0xF) ^ 0x30);
+}
+```
+
+
 ### conditional
+conditional 要求我们实现一个三目运算符，根据 `x` 的值选择输出 `y` 或 `z`，类似于多路复用器（Multiplexer），多路复用器的作用就是控制信号 `s` 来决定输出哪一个值（`y` 或 `z`），多路复用器的结构如下图所示：
+
+![multiplexer](./images/multiplexer.jpg)
+
+我们可以先根据 `x` 的值，通过表达式 `~((!x << 31) >> 31)` 生成一个掩码 `mask`，计算的过程如下表所示：
+| `x` | `!x` | `(!x << 31) >> 31` | `~((!x << 31) >> 31)` |
+| --- | --- | --- | --- |
+| 0 | 1 | 0xFFFFFFFF | 0 |
+| 其他 | 0 | 0 | 0xFFFFFFFF | 
+
+`mask` 等于 0 当且仅当 `x` 的值为 0，因此我们将位级的多路复用器推广到字级，表达式 `(mask & y) | (~mask & z)` 即可实现三目运算符。
 
 ```c
 /* 
@@ -177,7 +241,186 @@ int negate(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  int mask = x >> 31;
-  return (mask & y) | (!mask & z);
+  int mask = ~((!x << 31) >> 31);
+  return (mask & y) | (~mask & z);
 }
 ```
+
+### isLessOrEqual
+isLessOrEqual 要求我们实现小于等于号，大致的思路为：计算 `z = x - y`，判断 `z` 的符号。由于异号整数的减法可能会出现溢出问题（overflow），分类讨论：
+| Case | Expr  | Result |
+| --- | --- | --- |
+| x < 0 , y > 0 | `sx & !sy` | True |
+| x 与 y 同号 | `x - y > 0` | True |
+| x > 0, y < 0 | - | False |
+
+我们只需要考虑结果可能为 True 的情况，并利用对应的表达式进行判断。
+```c
+/* 
+ * isLessOrEqual - if x <= y  then return 1, else return 0 
+ *   Example: isLessOrEqual(4,5) = 1.
+ *   Legal ops: ! ~ & ^ | + << >>
+ *   Max ops: 24
+ *   Rating: 3
+ */
+int isLessOrEqual(int x, int y) {
+  // 获取 x、y 的符号位
+  int sx = (x >> 31) & 1;
+  int sy = (y >> 31) & 1;
+  // 计算 x - y
+  int z = x + ~y + 1;
+  int lessFlag = (sx & !sy) | (!(sx ^ sy) & ((z >> 31) & 1));
+  int equalFlag = !z;
+
+  return lessFlag | equalFlag;
+}
+```
+
+### logicalNeg
+logicalNeg 要求我们实现 `!` 运算符（逻辑非），`!x` 结果为 1 当且仅当 `x` 为 0。因此我们只需要判断输入 `x` 是否为 0 即可。`-x` 与 `x` 相等共有以下两种情况：
+1. `x` 为 0
+2. `x` 为 TMin32
+
+因此我们只需要将情况 2 排除即可，直接通过符号位的判断。
+```c
+/* 
+ * logicalNeg - implement the ! operator, using all of 
+ *              the legal operators except !
+ *   Examples: logicalNeg(3) = 0, logicalNeg(0) = 1
+ *   Legal ops: ~ & ^ | + << >>
+ *   Max ops: 12
+ *   Rating: 4 
+ */
+int logicalNeg(int x) {
+  // 获取 x 的符号位
+  int sx = (x >> 31) & 1;
+  // 计算 -x
+  int y = ~x + 1;
+  return !sx & !(x ^ y);
+}
+```
+
+### howManyBits
+howManyBits 要求我们计算出能精确表示 `x` 的最小位数，这里涉及到截断（Truncate）问题，记 $x=(x_{31}, x_{30},\dots, x_0)$，若截断高位，保留低 n 位，截断后的值记为 $x^{\prime}=(x_{n-1}, x_{n-2}, \dots,x_0)$，当且仅当 $x_{31}=x_{30}=\cdots=x_{n-1}$ 时，$x=x^\prime$。
+
+howManyBits 就是要我们找到使得 $x=x^\prime$ 成立的最小 n 值。显然我们可以通过判断 `(x << n) >> n` 与 `x` 是否相等来判断 $x=x^\prime$。最简单的方式就是使用循环找到最小的 n，但根据整数编码规则，我们不可以使用任何控制结构。因此我们可以利用**二分查找**的思想编写顺序代码，减少运算符的使用次数。
+```c
+/* howManyBits - return the minimum number of bits required to represent x in
+ *             two's complem)ent
+ *  Examples: howManyBits(12) = 5
+ *            howManyBits(298) = 10
+ *            howManyBits(-5) = 4
+ *            howManyBits(0)  = 1
+ *            howManyBits(-1) = 1
+ *            howManyBits(0x80000000 = 32
+ *  Legal ops: ! ~ & ^ | + << >>
+ *  Max ops: 90
+ *  Rating: 4
+ */
+int howManyBits(int x) {
+  int flag16 = 0;
+  int flag8 = 0;
+  int flag4 = 0;
+  int flag2 = 0;
+  int flag1 = 0;
+  int y;
+
+  // flag16 为 1 表示 x 可由 16 bit 进行表示
+  y = (x << 16) >> 16;
+  flag16 = !(x ^ y);
+  x <<= (flag16 << 4);
+
+  y = (x << 8) >> 8;
+  flag8 = !(x ^ y);
+  x <<= (flag8 << 3);
+
+  y = (x << 4) >> 4;
+  flag4 = !(x ^ y);
+  x <<= (flag4 << 2);
+
+  y = (x << 2) >> 2;
+  flag2 = !(x ^ y);
+  x <<= (flag2 << 1);
+
+  y = (x << 1) >> 1;
+  flag1 = !(x ^ y);
+
+  return 32 + ~((flag16 << 4) + (flag8 << 3) + (flag4 << 2) + (flag2 << 1) + flag1) + 1;
+}
+```
+
+### floatScale2
+floatScale2 要求我们实现 `2 * f`，其输入为浮点数 `f` 的位级表示 `uf`，大致的思路为：**若 `f` 为规格化数，则将阶码 exp 加 1；若 `f` 为非规格化数，则将 `frac` 左移 1 位**。
+
+对于 IEEE754 浮点数，其值的计算公式为：
+$$
+V=(-1)^s\times M\times 2^{E}
+$$
+对于规格化数，$E=exp-bias$，对于非规格化数，$E=-bias$。
+
+根据阶码 exp 的值，IEEE754 浮点数分为以下 3 类：
+1. **规格化数**，0 < exp  < 255。
+2. **非规格化数**，exp = 0。
+3. **特殊值**，exp=255。
+    - *Infinity* (frac = 0)。
+    - *NaN*
+
+对于情况 3，直接返回输入参数 `uf` 即可，而对于情况 1 和情况 2，则需要进行一些特殊判断以及处理，因为 `2 * f` 的结果可能会改变浮点数的类型：
+- 若 exp = 254，则 `2 * f` 会溢出为 *Infnity*。
+- 若 exp = 0，且 `2 * frac` 超过了 frac 的 23 位表示范围。
+
+注：上述两种特殊情况，实际上都是 `2 * f` 溢出改变了 `f` 的类型。
+
+```c
+/* 
+ * floatScale2 - Return bit-level equivalent of expression 2*f for
+ *   floating point argument f.
+ *   Both the argument and result are passed as unsigned int's, but
+ *   they are to be interpreted as the bit-level representation of
+ *   single-precision floating point values.
+ *   When argument is NaN, return argument
+ *   Legal ops: Any integer/unsigned operations incl. ||, &&. also if, while
+ *   Max ops: 30
+ *   Rating: 4
+ */
+unsigned floatScale2(unsigned uf) {
+  // 获取符号、阶码、尾数
+  int s = uf >> 31;
+  int exp = (uf >> 23) & 0xFF;
+  int frac = uf & 0x7FFFFF;
+
+  // exp 为 255 说明 uf 表示的浮点数 f 为 NaN 或者 Infinity，直接返回 uf
+  if (exp == 255)
+    return uf;
+  
+  if (0 < exp && exp < 254)
+  {
+    // normal case, 2 * f 为规格化数
+    exp += 1;
+  }
+  else if (exp == 0)
+  {
+    frac <<= 1;
+    if (frac > 0x7FFFFF)
+    {
+      // 2 * f 变为规格化数
+      exp = 1;
+      frac &= 0x7FFFFF;
+    }
+  }
+  else if (exp == 254)
+  {
+    // 2 * f => Infinity
+    exp = 255;
+    frac = 0;
+  }
+
+  return (s << 31) | (exp << 23) | frac;
+}
+```
+
+### floatFloat2Int
+
+
+### floatPower2
+
