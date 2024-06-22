@@ -6,6 +6,8 @@ CS123 是卡内基梅隆大学的计算机系统课程，其配套教材为：*C
 ## About
 本项目提供了与 CSAPP 相关的资源，包括 CSAPP 的官方课件、CSAPP 教材电子版、实验及个人解答、课后作业个人解答等部分。
 
+其中，CSAPP 所有实验资源存放于 labs 目录下，对应的实验解决方案存放于 labs/solutions 目录下。
+
 下表列出了一些 CSAPP 课程视频：
 | Source | Link | Instructors |
 | --- | --- | --- |
