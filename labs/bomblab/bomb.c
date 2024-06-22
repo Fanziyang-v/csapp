@@ -6,7 +6,7 @@
  *
  * Dr. Evil Incorporated (the PERPETRATOR) hereby grants you (the
  * VICTIM) explicit permission to use this bomb (the BOMB).  This is a
- * time limited license, which expires on the death of the VICTIM.
+ * time limited license, w hich expires on the death of the VICTIM.
  * The PERPETRATOR takes no responsibility for damage, frustration,
  * insanity, bug-eyes, carpal-tunnel syndrome, loss of sleep, or other
  * harm to the VICTIM.  Unless the PERPETRATOR wants to take credit,
