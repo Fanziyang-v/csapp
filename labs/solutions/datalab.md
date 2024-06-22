@@ -305,7 +305,7 @@ logicalNeg 要求我们实现 `!` 运算符（逻辑非），`!x` 结果为 1 �
 1. `x` 为 0
 2. `x` 为 TMin32
 
-因此我们只需要将情况 2 排除即可，直接通过符号位的判断。
+因此我们只需要将情况 2 排除即可，直接通过符号位的判断，具体来说就是当 `x` 和 `-x` 的符号位相同且为 0（排除情况 2）时， x = 0。
 
 ```c
 /*
@@ -317,11 +317,9 @@ logicalNeg 要求我们实现 `!` 运算符（逻辑非），`!x` 结果为 1 �
  *   Rating: 4
  */
 int logicalNeg(int x) {
-  // 获取 x 的符号位
-  int sx = (x >> 31) & 1;
   // 计算 -x
   int y = ~x + 1;
-  return !sx & !(x ^ y);
+  return ((~x & ~y) >> 31) & 1;
 }
 ```
 
@@ -513,3 +511,127 @@ int floatFloat2Int(unsigned uf)
 ```
 
 ### floatPower2
+
+floatPower2 要求我们计算 $2^x$，对于 IEEE754 单精度浮点数来说，其表示的范围是有限的，$2^x$ 的范围是 $2^{k}$，其中 $k\in \mathbb{Z}$ 且：
+
+- 对于规格化数，$ -126\le k\le 127$。
+- 对于非规格化数，$-149\le k \le -127$。
+
+对于规格化数（0 < exp < 255），其值的计算方式为：
+
+$$
+V=(-1)^s\times 1.f\times 2^{(exp - bias)}
+$$
+
+尾数 f = 0 的规格化数可以表示 $2^x$，最小值对应的 exp = 1，最大值对应的 exp = 254。
+
+对于非规格化数（exp=0），其值的计算方式为：
+
+$$
+V=(-1)^s\times 0.f \times 2^{1-bias}
+$$
+
+尾数 f 中有一个比特为 1 的非规格化数也可以表示 $2^x$，最小值对应的 f = 1，最大值对应的 f = 0x400000。
+
+```c
+/*
+ * floatPower2 - Return bit-level equivalent of the expression 2.0^x
+ *   (2.0 raised to the power x) for any 32-bit integer x.
+ *
+ *   The unsigned value that is returned should have the identical bit
+ *   representation as the single-precision floating-point number 2.0^x.
+ *   If the result is too small to be represented as a denorm, return
+ *   0. If too large, return +INF.
+ *
+ *   Legal ops: Any integer/unsigned operations incl. ||, &&. Also if, while
+ *   Max ops: 30
+ *   Rating: 4
+ */
+unsigned floatPower2(int x)
+{
+  unsigned result = 0;
+
+  // 2.0^x => +Infinity
+  if (x > 127)
+    return 0x7F800000u;
+  else if (x < -149)
+    return 0u;
+  else if (-149 <= x && x <= -127)
+  {
+    result = 1 << (x + 149);
+  }
+  else // -126 <= x <= 127
+  {
+    result = (x + 127) << 23;
+  }
+
+  return result;
+}
+```
+
+## Evaluation
+
+运行以下指令，对 bits.c 进行编译和**正确性测试**：
+
+```bash
+make
+./btest
+```
+
+可得到如下结果：
+
+```
+Score   Rating  Errors  Function
+ 1      1       0       bitXor
+ 1      1       0       tmin
+ 1      1       0       isTmax
+ 2      2       0       allOddBits
+ 2      2       0       negate
+ 3      3       0       isAsciiDigit
+ 3      3       0       conditional
+ 3      3       0       isLessOrEqual
+ 4      4       0       logicalNeg
+ 4      4       0       howManyBits
+ 4      4       0       floatScale2
+ 4      4       0       floatFloat2Int
+ 4      4       0       floatPower2
+Total points: 36/36
+```
+
+运行以下指令，验证编码的**合法性**：
+
+```bash
+./dlc bits.c
+```
+
+不输出任何错误信息，说明每一个问题均符合题目要求。
+
+运行以下指令，进行**性能测试**：
+
+```bash
+./driver.pl
+```
+
+得到如下结果：
+
+```
+Correctness Results     Perf Results
+Points  Rating  Errors  Points  Ops     Puzzle
+1       1       0       2       8       bitXor
+1       1       0       2       1       tmin
+1       1       0       2       7       isTmax
+2       2       0       2       9       allOddBits
+2       2       0       2       2       negate
+3       3       0       2       10      isAsciiDigit
+3       3       0       2       8       conditional
+3       3       0       2       17      isLessOrEqual
+4       4       0       2       7       logicalNeg
+4       4       0       2       39      howManyBits
+4       4       0       2       18      floatScale2
+4       4       0       2       24      floatFloat2Int
+4       4       0       2       12      floatPower2
+
+Score = 62/62 [36/36 Corr + 26/26 Perf] (162 total operators)
+```
+
+可以看到我们编码的正确性分数和性能分数是满分的。

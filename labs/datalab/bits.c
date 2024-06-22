@@ -249,11 +249,9 @@ int isLessOrEqual(int x, int y)
  */
 int logicalNeg(int x)
 {
-  // 获取 x 的符号位
-  int sx = (x >> 31) & 1;
   // 计算 -x
   int y = ~x + 1;
-  return !sx & !(x ^ y);
+  return ((~x & ~y) >> 31) & 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complem)ent
@@ -393,5 +391,21 @@ int floatFloat2Int(unsigned uf)
  */
 unsigned floatPower2(int x)
 {
-  return 2;
+  unsigned result = 0;
+
+  // 2.0^x => +Infinity
+  if (x > 127)
+    return 0x7F800000u;
+  else if (x < -149)
+    return 0u;
+  else if (-149 <= x && x <= -127)
+  {
+    result = 1 << (x + 149);
+  }
+  else // -126 <= x <= 127
+  {
+    result = (x + 127) << 23;
+  }
+
+  return result;
 }
