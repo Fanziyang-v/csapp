@@ -243,7 +243,9 @@ call   0x40143a <explode_bomb>
 $2 = 0x4025cf "%d %d"
 ```
 
-其实就是 C 语言的 scanf 函数的输入格式串，实际上需要我们输入两个整数 x、y，**若输入的整数个数小于 2，炸弹将会被引爆**。
+其实就是 C 语言的 [sscanf 函数](https://cplusplus.com/reference/cstdio/sscanf/)的输入格式串，实际上需要我们输入两个整数 x、y，**若输入的整数个数小于 2，炸弹将会被引爆**。
+
+
 
 若输入的整数个数大于或等于 2，则会执行下列指令，**若第 1 个整数大于 7，则炸弹将会引爆**。
 
@@ -795,7 +797,7 @@ Dump of assembler code for function phase_6:
    0x0000000000401203 <+271>:   ret    
 End of assembler dump.
 ```
-Phase 6 的汇编代码很长，我们逐个部分进行分析，
+Phase 6 的汇编代码很长，我们逐个部分进行分析，Phase 6 的汇编代码首先将被调用者保存寄存器的值**保存于栈中**，以便可以直接使用这些寄存器。然后在栈上分配空间，调用函数 `read_six_numbers` 读取 6 个整数，依次存放在栈上。
 ```
 push   %r14
 push   %r13
@@ -807,8 +809,469 @@ mov    %rsp,%r13
 mov    %rsp,%rsi
 call   0x40145c <read_six_numbers>
 ```
+接下来执行一个循环，循环的每一步，首先检测输入的整数是否大于 6，若是，则炸弹将会被引爆。因此，Phase 6 要求 **输入的每一个整数小于或等于 6**。然后判断后一个整数是否等于前一个整数（**即判断相邻整数是否相等**），若相等，则炸弹被引爆，因此，Phase 6 还要求 **输入的每一个整数不同**。
+```
+mov    %rsp,%r14 # <phase_6+32>
+mov    $0x0,%r12d
+mov    %r13,%rbp
+mov    0x0(%r13),%eax
+sub    $0x1,%eax
+cmp    $0x5,%eax
+jbe    0x401128 <phase_6+52>
+call   0x40143a <explode_bomb>
+add    $0x1,%r12d # <phase_6+52>
+cmp    $0x6,%r12d
+je     0x401153 <phase_6+95>
+mov    %r12d,%ebx
+movslq %ebx,%rax    # <phase_6+65>
+mov    (%rsp,%rax,4),%eax
+cmp    %eax,0x0(%rbp)
+jne    0x401145 <phase_6+81>
+call   0x40143a <explode_bomb>
+add    $0x1,%ebx    # <phase_6+81>
+cmp    $0x5,%ebx
+jle    0x401135 <phase_6+65>
+add    $0x4,%r13
+jmp    0x401114 <phase_6+32>
+```
+注：寄存器 %r13 用于存放指向这 6 个整数的指针，每次迭代时会指向下一个整数；寄存器 %r12d 为循环计数器，用于记录循环迭代次数。
+
+接下来执行一个循环，用于将输入的整数做一个**变换**，对于每一个整数 x，将其替换为 7 - x。
+```
+lea    0x18(%rsp),%rsi
+mov    %r14,%rax
+mov    $0x7,%ecx
+mov    %ecx,%edx    # <phase_6+108>
+sub    (%rax),%edx
+mov    %edx,(%rax)
+add    $0x4,%rax
+cmp    %rsi,%rax
+jne    0x401160 <phase_6+108>
+```
+
+继续执行下面这一个**二重循环**，内存地址 *0x6032d0* 是一个具有 6 个结点的链表的头指针，该循环作用是以经过 7 - x 变换的 6 个整数作为序号，**按序号依次存放这 6 个结点的指针于栈上**（首地址为 R[%rsp]+0x20）。
+```
+mov    $0x0,%esi
+jmp    0x401197 <phase_6+163>
+mov    0x8(%rdx),%rdx   # <phase_6+130>
+add    $0x1,%eax
+cmp    %ecx,%eax
+jne    0x401176 <phase_6+130>
+jmp    0x401188 <phase_6+148>
+mov    $0x6032d0,%edx   # <phase_6+143>
+mov    %rdx,0x20(%rsp,%rsi,2)   # <phase_6+148>
+add    $0x4,%rsi
+cmp    $0x18,%rsi
+je     0x4011ab <phase_6+183>
+mov    (%rsp,%rsi,1),%ecx   # <phase_6+163>
+cmp    $0x1,%ecx
+jle    0x401183 <phase_6+143>
+mov    $0x1,%eax
+mov    $0x6032d0,%edx
+jmp    0x401176 <phase_6+130>
+```
+运行下面指令，查看内存地址 *0x6032d0* 处的链表内容：
+```
+(gdb) x/24w  0x6032d0
+0x6032d0 <node1>:       0x0000014c      0x00000001      0x006032e0      0x00000000
+0x6032e0 <node2>:       0x000000a8      0x00000002      0x006032f0      0x00000000
+0x6032f0 <node3>:       0x0000039c      0x00000003      0x00603300      0x00000000
+0x603300 <node4>:       0x000002b3      0x00000004      0x00603310      0x00000000
+0x603310 <node5>:       0x000001dd      0x00000005      0x00603320      0x00000000
+0x603320 <node6>:       0x000001bb      0x00000006      0x00000000      0x00000000
+```
+可见，每个链表结点有三个属性域：value、no、next，对应 C 语言的结点定义如下：
+```c
+struct node
+{
+    int value;  // 结点值
+    int no;     // 序号
+    node *next; // 下一个结点的指针
+};
+```
+将链表内容转化为如下表格：
+| node | no  | value | address | next |
+| ---- | --- | ----- | ------- | ---- |
+| node1| 1   | 0x14c | 0x6032d0 | 0x6032e0|
+| node2| 2 | 0xa8 | 0x6032e0 | 0x6032f0 |
+| node3| 3 | 0x39c | 0x6032f0 | 0x603300 |
+| node4| 4 | 0x2b3 | 0x603300 | 0x603310 |
+| node5| 5 | 0x1dd | 0x603310 | 0x603320 |
+| node6| 6 | 0x1bb | 0x603320 | 0
+
+继续执行以下循环，该循环的作用是利用前一个循环存放于栈上的结点指针，**按顺序调整链表**，因此我们最终得到的链表**对应于**经过 7-x 变换的整数序列。
+```
+mov    0x20(%rsp),%rbx
+lea    0x28(%rsp),%rax
+lea    0x50(%rsp),%rsi
+mov    %rbx,%rcx
+mov    (%rax),%rdx  # <phase_6+201>
+mov    %rdx,0x8(%rcx)
+add    $0x8,%rax
+cmp    %rsi,%rax
+je     0x4011d2 <phase_6+222>
+mov    %rdx,%rcx
+jmp    0x4011bd <phase_6+201>
+movq   $0x0,0x8(%rdx)
+```
+基于上一个循环重整后的链表，执行以下循环，该循环用于测试链表的后一个结点值是否**小于**前一个节点值，若不是，则炸弹将会被引爆。因此，重整后链表的**结点值顺序为：0x39c->0x2b3->0x1dd->0x1bb->0x14c->0xa8**，对应的**序号顺序为：3->4->5->6->1->2**。
+```
+mov    $0x5,%ebp
+mov    0x8(%rbx),%rax   # <phase_6+235>
+mov    (%rax),%eax
+cmp    %eax,(%rbx)
+jge    0x4011ee <phase_6+250>
+call   0x40143a <explode_bomb>
+mov    0x8(%rbx),%rbx   # <phase_6+250>
+sub    $0x1,%ebp
+jne    0x4011df <phase_6+235>
+```
+由于经过了变换 7 - x，因此我们得到**原始输入顺序为：4->3->2->1->6->5**。测试通过：
+```
+4 3 2 1 6 5
+Congratulations! You've defused the bomb!
+[Inferior 1 (process 32348) exited normally]
+```
+Phase 6 对应的 C 语言代码为：
+```c
+struct node
+{
+    int value;
+    int no;
+    node *next;
+};
+
+node list[6];
+
+// 链表初始化
+void initialize_list()
+{
+    int i;
+    int values[6] = {0x14c, 0xa8, 0x39c, 0x2b3, 0x1dd, 0x1bb};
+
+    for (i = 0; i < 6; i++)
+    {
+        list[i].value = values[i];
+        list[i].no = i + 1;
+        if (i < 5)
+            list[i].next = &list[i + 1];
+        else
+            list[i].next = NULL;
+    }
+}
+
+void phase_6(int nums[])
+{
+    int i, j;
+    node *head = list;
+    node *ptrs[6];
+    node *p;
+    // 输入变换
+    for (i = 0; i < 6; i++)
+        nums[i] = 7 - nums[i];
+    
+    // 重整链表
+    for (i = 0; i < 6; i++)
+    {
+        p = head;
+        for (j = 0; j < nums[i]; i++)
+            p = p->next;
+        ptrs[i] = p;
+    }
+
+    p = head = ptrs[0];
+    for (i = 1; i < 6; i++)
+    {
+        p->next = ptrs[i];
+        p = ptrs[i];
+    }
+    p->next = NULL;
+
+    p = head;
+    while (p->next)
+    {
+        if (p->next->value < p->value)
+            explode_bomb();
+        p = p->next;
+    }
+}
+```
 
 ### Secret Phase
+Bomblab 最后还有一个**隐藏关卡**，我们可以注意到 bomb.c 中有这样一句注释：
+```c
+/* Wow, they got it!  But isn't something... missing?  Perhaps
+ * something they overlooked?  Mua ha ha ha ha! */
+```
+实际上，函数 `phase_defused` 是可疑的，运行反汇编指令，获取函数 `phase_defused` 的汇编代码：
+```
+Dump of assembler code for function phase_defused:
+   0x00000000004015c4 <+0>:     sub    $0x78,%rsp
+   0x00000000004015c8 <+4>:     mov    %fs:0x28,%rax
+   0x00000000004015d1 <+13>:    mov    %rax,0x68(%rsp)
+   0x00000000004015d6 <+18>:    xor    %eax,%eax
+   0x00000000004015d8 <+20>:    cmpl   $0x6,0x202181(%rip)        # 0x603760 <num_input_strings>
+   0x00000000004015df <+27>:    jne    0x40163f <phase_defused+123>
+   0x00000000004015e1 <+29>:    lea    0x10(%rsp),%r8
+   0x00000000004015e6 <+34>:    lea    0xc(%rsp),%rcx
+   0x00000000004015eb <+39>:    lea    0x8(%rsp),%rdx
+   0x00000000004015f0 <+44>:    mov    $0x402619,%esi
+   0x00000000004015f5 <+49>:    mov    $0x603870,%edi
+   0x00000000004015fa <+54>:    call   0x400bf0 <__isoc99_sscanf@plt>
+   0x00000000004015ff <+59>:    cmp    $0x3,%eax
+   0x0000000000401602 <+62>:    jne    0x401635 <phase_defused+113>
+   0x0000000000401604 <+64>:    mov    $0x402622,%esi
+   0x0000000000401609 <+69>:    lea    0x10(%rsp),%rdi
+   0x000000000040160e <+74>:    call   0x401338 <strings_not_equal>
+   0x0000000000401613 <+79>:    test   %eax,%eax
+   0x0000000000401615 <+81>:    jne    0x401635 <phase_defused+113>
+   0x0000000000401617 <+83>:    mov    $0x4024f8,%edi
+   0x000000000040161c <+88>:    call   0x400b10 <puts@plt>
+   0x0000000000401621 <+93>:    mov    $0x402520,%edi
+   0x0000000000401626 <+98>:    call   0x400b10 <puts@plt>
+   0x000000000040162b <+103>:   mov    $0x0,%eax
+   0x0000000000401630 <+108>:   call   0x401242 <secret_phase>
+   0x0000000000401635 <+113>:   mov    $0x402558,%edi
+   0x000000000040163a <+118>:   call   0x400b10 <puts@plt>
+   0x000000000040163f <+123>:   mov    0x68(%rsp),%rax
+   0x0000000000401644 <+128>:   xor    %fs:0x28,%rax
+   0x000000000040164d <+137>:   je     0x401654 <phase_defused+144>
+   0x000000000040164f <+139>:   call   0x400b30 <__stack_chk_fail@plt>
+   0x0000000000401654 <+144>:   add    $0x78,%rsp
+   0x0000000000401658 <+148>:   ret    
+End of assembler dump.
+```
+`num_input_strings` 记录已经输入的字符串个数，该全局变量在函数 `read_line` 中更新，下面两行代码，在解决掉第 6 阶段之前，是不会执行一段特定的代码的。
+```
+cmpl   $0x6,0x202181(%rip)        # 0x603760 <num_input_strings>
+jne    0x40163f <phase_defused+123>
+```
+这段特定代码如下，首先通过 sscanf 函数读取内容，依次存放于内存地址：R[%rsp]+8、R[%rsp]+12、R[%rsp]+16，格式串为内存地址 *0x402619* 处的字符串 `"%d %d %s"`，源字符串为内存地址 *0x603870* 处的字符串，这个字符串为 Phase 4 输入的字符串的地址。
 
+```
+lea    0x10(%rsp),%r8
+lea    0xc(%rsp),%rcx
+lea    0x8(%rsp),%rdx
+mov    $0x402619,%esi
+mov    $0x603870,%edi
+call   0x400bf0 <__isoc99_sscanf@plt>
+cmp    $0x3,%eax
+jne    0x401635 <phase_defused+113>
+mov    $0x402622,%esi
+lea    0x10(%rsp),%rdi
+call   0x401338 <strings_not_equal>
+test   %eax,%eax
+jne    0x401635 <phase_defused+113>
+mov    $0x4024f8,%edi
+call   0x400b10 <puts@plt>
+mov    $0x402520,%edi
+call   0x400b10 <puts@plt>
+mov    $0x0,%eax
+call   0x401242 <secret_phase>
+mov    $0x402558,%edi   # <phase_defused+113>
+call   0x400b10 <puts@plt>
+```
+触发机制为输入特定的字符串，因为这里调用了 `string_not_equal` 函数，只有输入字符串与位于地址 *0x402622* 的目标字符串相同，隐藏关卡才会触发。运行以下指令，查看目标字符串内容。
+```
+(gdb) print (char *)0x402622
+$4 = 0x402622 "DrEvil"
+```
+因此，我们在 Phase 4 的输入上添加一个字符串 `"DrEvil"`，测试如下：
+```
+(gdb) run
+Welcome to my fiendish little bomb. You have 6 phases with
+which to blow yourself up. Have a nice day!
+Border relations with Canada have never been better.
+Phase 1 defused. How about the next one?
+1 2 4 8 16 32
+That's number 2.  Keep going!
+0 207
+Halfway there!
+0 0 DrEvil
+So you got that one.  Try this one.
+ionefg
+Good work!  On to the next...
+4 3 2 1 6 5
+Curses, you've found the secret phase!
+But finding it and solving it are quite different...
+
+Breakpoint 2, 0x0000000000401242 in secret_phase ()
+(gdb) 
+```
+在 Phase 4 增添一个字符串输入 `"DrEvil"` **成功触发了隐藏关卡**。运行反汇编指令，获取 Secret Phase 的汇编代码：
+```
+(gdb) disas secret_phase
+Dump of assembler code for function secret_phase:
+   0x0000000000401242 <+0>:     push   %rbx
+   0x0000000000401243 <+1>:     call   0x40149e <read_line>
+   0x0000000000401248 <+6>:     mov    $0xa,%edx
+   0x000000000040124d <+11>:    mov    $0x0,%esi
+   0x0000000000401252 <+16>:    mov    %rax,%rdi
+   0x0000000000401255 <+19>:    call   0x400bd0 <strtol@plt>
+   0x000000000040125a <+24>:    mov    %rax,%rbx
+   0x000000000040125d <+27>:    lea    -0x1(%rax),%eax
+   0x0000000000401260 <+30>:    cmp    $0x3e8,%eax
+   0x0000000000401265 <+35>:    jbe    0x40126c <secret_phase+42>
+   0x0000000000401267 <+37>:    call   0x40143a <explode_bomb>
+   0x000000000040126c <+42>:    mov    %ebx,%esi
+   0x000000000040126e <+44>:    mov    $0x6030f0,%edi
+   0x0000000000401273 <+49>:    call   0x401204 <fun7>
+   0x0000000000401278 <+54>:    cmp    $0x2,%eax
+   0x000000000040127b <+57>:    je     0x401282 <secret_phase+64>
+   0x000000000040127d <+59>:    call   0x40143a <explode_bomb>
+   0x0000000000401282 <+64>:    mov    $0x402438,%edi
+   0x0000000000401287 <+69>:    call   0x400b10 <puts@plt>
+   0x000000000040128c <+74>:    call   0x4015c4 <phase_defused>
+   0x0000000000401291 <+79>:    pop    %rbx
+   0x0000000000401292 <+80>:    ret    
+End of assembler dump.
+```
+首先分析前几行代码，尝试分析 Secret Phase 的输入内容，首先调用 `read_line` 函数读取一行字符串，接着调用 [strtol 函数](https://cplusplus.com/reference/cstdlib/strtol/) 将一个字符串转换为一个 long 类型的整数（**基数为10**），因此可以推测，Secret Phase 需要输入一个整数。
+```
+push   %rbx
+call   0x40149e <read_line>
+mov    $0xa,%edx
+mov    $0x0,%esi
+mov    %rax,%rdi
+call   0x400bd0 <strtol@plt>
+```
+若输入的整数大于 `0x3e8+1`(1001)，则炸弹被引爆，因此输入的整数不超过 1001。
+```
+mov    %rax,%rbx
+lea    -0x1(%rax),%eax
+cmp    $0x3e8,%eax
+jbe    0x40126c <secret_phase+42>
+call   0x40143a <explode_bomb>
+```
+Secret Phase 剩下的部分代码如下，调用了 fun7 函数，若 fun7 函数的返回值为 2，则炸弹被拆除。在分析 fun7 函数之前，我们注意到 fun7 的参数为 *0x6030f0*
+```
+mov    %ebx,%esi
+mov    $0x6030f0,%edi
+call   0x401204 <fun7>
+cmp    $0x2,%eax
+je     0x401282 <secret_phase+64>
+call   0x40143a <explode_bomb>
+mov    $0x402438,%edi
+call   0x400b10 <puts@plt>
+call   0x4015c4 <phase_defused>
+pop    %rbx
+ret
+```
+运行以下指令，获取内存 *0x6030f0* 的内容，实际上，这是一棵**二叉树**。
+```
+(gdb) x/60g 0x6030f0
+0x6030f0 <n1>:  0x0000000000000024      0x0000000000603110
+0x603100 <n1+16>:       0x0000000000603130      0x0000000000000000
+0x603110 <n21>: 0x0000000000000008      0x0000000000603190
+0x603120 <n21+16>:      0x0000000000603150      0x0000000000000000
+0x603130 <n22>: 0x0000000000000032      0x0000000000603170
+0x603140 <n22+16>:      0x00000000006031b0      0x0000000000000000
+0x603150 <n32>: 0x0000000000000016      0x0000000000603270
+0x603160 <n32+16>:      0x0000000000603230      0x0000000000000000
+0x603170 <n33>: 0x000000000000002d      0x00000000006031d0
+0x603180 <n33+16>:      0x0000000000603290      0x0000000000000000
+0x603190 <n31>: 0x0000000000000006      0x00000000006031f0
+0x6031a0 <n31+16>:      0x0000000000603250      0x0000000000000000
+0x6031b0 <n34>: 0x000000000000006b      0x0000000000603210
+0x6031c0 <n34+16>:      0x00000000006032b0      0x0000000000000000
+0x6031d0 <n45>: 0x0000000000000028      0x0000000000000000
+0x6031e0 <n45+16>:      0x0000000000000000      0x0000000000000000
+0x6031f0 <n41>: 0x0000000000000001      0x0000000000000000
+0x603200 <n41+16>:      0x0000000000000000      0x0000000000000000
+0x603210 <n47>: 0x0000000000000063      0x0000000000000000
+0x603220 <n47+16>:      0x0000000000000000      0x0000000000000000
+0x603230 <n44>: 0x0000000000000023      0x0000000000000000
+0x603240 <n44+16>:      0x0000000000000000      0x0000000000000000
+0x603250 <n42>: 0x0000000000000007      0x0000000000000000
+0x603260 <n42+16>:      0x0000000000000000      0x0000000000000000
+0x603270 <n43>: 0x0000000000000014      0x0000000000000000
+0x603280 <n43+16>:      0x0000000000000000      0x0000000000000000
+0x603290 <n46>: 0x000000000000002f      0x0000000000000000
+0x6032a0 <n46+16>:      0x0000000000000000      0x0000000000000000
+0x6032b0 <n48>: 0x00000000000003e9      0x0000000000000000
+0x6032c0 <n48+16>:      0x0000000000000000      0x0000000000000000
+```
+假设二叉树结点定义为：
+```c
+struct TreeNode
+{
+    int value;
+    TreeNode *left;
+    TreeNode *right;
+};
+```
+将上述结点内容转换为如下表格：
+| node | value | left | right | address |
+| --- | --- | --- | --- | --- |
+| n1 | 0x24 | 0x603110 | 0x603130 | 0x6030f0 |
+| n21 | 0x8 | 0x603190 | 0x603150 | 0x603110 |
+| n22 | 0x32 | 0x603170 | 0x6031b0 | 0x603130 |
+| n31 | 0x6 | 0x6031f0 | 0x603250 | 0x603190 |
+| n32 | 0x16 | 0x603270 | 0x603230 | 0x603150 |
+| n33 | 0x2d | 0x6031d0 | 0x603290 | 0x603170 |
+| n34 | 0x6b | 0x603210 | 0x6032b0 | 0x6031b0 |
+| n41 | 0x1 | NULL | NULL | 0x6031f0 |
+| n42 | 0x7 | NULL | NULL | 0x603250 |
+| n43 | 0x14 | NULL | NULL | 0x603270 |
+| n44 | 0x23 | NULL | NULL | 0x603230 |
+| n45 | 0x28 | NULL | NULL | 0x6031d0 |
+| n46 | 0x2f | NULL | NULL | 0x603290 |
+| n47 | 0x63 | NULL | NULL | 0x603210 |
+| n48 | 0x3e9 | NULL | NULL | 0x6032b0 |
+
+对应的二叉树如下图所示：
+![img](./images/secret_phase_bintree.png)
+实际上，这棵二叉树是一棵**二叉搜索树**。
+
+接下来分析函数 fun7，运行反汇编指令，获取 fun7 的汇编代码，由于 fun7 会调用自身，因此函数 fun7 为**递归函数**。
+```
+(gdb) disas fun7
+Dump of assembler code for function fun7:
+   0x0000000000401204 <+0>:     sub    $0x8,%rsp
+   0x0000000000401208 <+4>:     test   %rdi,%rdi
+   0x000000000040120b <+7>:     je     0x401238 <fun7+52>
+   0x000000000040120d <+9>:     mov    (%rdi),%edx
+   0x000000000040120f <+11>:    cmp    %esi,%edx
+   0x0000000000401211 <+13>:    jle    0x401220 <fun7+28>
+   0x0000000000401213 <+15>:    mov    0x8(%rdi),%rdi
+   0x0000000000401217 <+19>:    call   0x401204 <fun7>
+   0x000000000040121c <+24>:    add    %eax,%eax
+   0x000000000040121e <+26>:    jmp    0x40123d <fun7+57>
+   0x0000000000401220 <+28>:    mov    $0x0,%eax
+   0x0000000000401225 <+33>:    cmp    %esi,%edx
+   0x0000000000401227 <+35>:    je     0x40123d <fun7+57>
+   0x0000000000401229 <+37>:    mov    0x10(%rdi),%rdi
+   0x000000000040122d <+41>:    call   0x401204 <fun7>
+   0x0000000000401232 <+46>:    lea    0x1(%rax,%rax,1),%eax
+   0x0000000000401236 <+50>:    jmp    0x40123d <fun7+57>
+   0x0000000000401238 <+52>:    mov    $0xffffffff,%eax
+   0x000000000040123d <+57>:    add    $0x8,%rsp
+   0x0000000000401241 <+61>:    ret    
+End of assembler dump.
+```
+函数 fun7 对应的 C 语言代码如下，其功能为在一棵二叉搜索树中进行查找，并做特定的处理。
+```c
+int fun7(TreeNode *root, int target)
+{
+    if (root == NULL)
+        return -1;
+    
+    if (root->value == target)
+        return 0;
+    else if (root->value > target)
+        return 2 * fun7(root->left, target);
+    else if (root->value < target)
+        return 2 * fun7(root->right, target) + 1;
+}
+```
+根据二叉搜索树的结构以及 fun7 的逻辑，为了使得最终返回值为 2，当目标结点为 n32，对应目标值为 0x16 时，fun7 的返回值为 2。测试如下：
+```
+22
+Wow! You've defused the secret stage!
+Congratulations! You've defused the bomb!
+```
 
 ## Summary
+Bomblab 非常考验**逆向工程**（Reverse Engineering）能力，运用 GDB 调试工具，反汇编可执行文件 bomb，分析关键函数的功能，从而分析出每一阶段需要输入的字符串。
+
+Bomblab 不愧是 CSAPP 口碑最好的实验，Bomblab 设计得真的很好，建议大家动手做一下，可以大大提升逆向工程能力。Good Luck!
