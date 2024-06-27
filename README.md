@@ -1,6 +1,8 @@
 # CSAPP
 
-CS123 是卡内基梅隆大学的计算机系统课程，其配套教材为：*Computer System: A Programmer's Perspective(CSAPP)，中文版为《深入理解计算机系统》。[CSAPP 官网](http://csapp.cs.cmu.edu) 中提供了这门课程的许多资源，包括 CSAPP 所有的实验以及课程相关的资源。
+CS213 是卡内基梅隆大学的计算机系统课程，其配套教材为：*Computer System: A Programmer's Perspective*(CSAPP)，中文版为《深入理解计算机系统》。[CSAPP 官网](http://csapp.cs.cmu.edu) 中提供了这门课程的许多资源，包括 CSAPP 所有的实验以及课程相关的资源。
+
+<img src="./images/csapp.png" alt="csapp" style="zoom:25%">
 
 ## TODO
 当前已完成 datalab、bomblab、attacklab 实验，实验详细解答位于 labs/solutions 目录下。接下来将会完成剩余的实验以及 CSAPP 课后作业的个人解答。
