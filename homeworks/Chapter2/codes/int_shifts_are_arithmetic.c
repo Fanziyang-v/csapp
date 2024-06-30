@@ -4,5 +4,5 @@ int int_shifts_are_arithmetic()
     int x = 0xff << shift_val;
     int y = x >> shift_val;
 
-    return !(x ^ y);
+    return 0xff != y;
 }

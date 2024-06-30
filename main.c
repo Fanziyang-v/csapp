@@ -1,5 +1,6 @@
-/* Return 1 when x contains an odd number of 1s; 0 otherwise.
-   Assume w=32 */
+#include <stdio.h>
+#include <stdlib.h>
+
 int odd_ones(unsigned x)
 {
     unsigned left = x >> 16; /* Get Higher 16 bits  */
@@ -17,4 +18,14 @@ int odd_ones(unsigned x)
     left = x >> 1; /* Get Higher 1 bit */
 
     return (x ^ left) & 0x1;
+}
+
+int main(int argc, char *argv[])
+{
+    unsigned x = atoi(argv[1]);
+    printf("0x%.8x\n", x);
+
+    printf("odd ones? = %d\n", odd_ones(x));
+
+    return 0;
 }
